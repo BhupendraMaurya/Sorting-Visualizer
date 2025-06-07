@@ -5,17 +5,17 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.Random;
-import java.util.concurrent.atomic.AtomicBoolean; // For thread safety with stopping
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class SortingVisualizer extends JFrame {
     // --- Constants and Volatile Variables for UI/Algorithm State ---
     private volatile int ARRAY_SIZE = 50;
-    private volatile int ELEMENT_WIDTH; // Calculated based on FRAME_WIDTH and ARRAY_SIZE
-    private static final int FRAME_WIDTH = 1000; // Reduced width to better fit many bars
+    private volatile int ELEMENT_WIDTH;
+    private static final int FRAME_WIDTH = 1000;
     private static final int FRAME_HEIGHT = 500;
-    private volatile int DELAY_MS = 50; // Initial delay for visualization speed
+    private volatile int DELAY_MS = 50;
 
-    private int[] array; // The array being sorted
+    private int[] array;
 
     // UI Components
     private JComboBox<String> algorithmComboBox;
@@ -26,21 +26,22 @@ public class SortingVisualizer extends JFrame {
     private JLabel algorithmInfoLabel;
     private JLabel swapCountLabel;
     private JLabel comparisonCountLabel;
+    private JPanel controlPanel; // <--- MAKE controlPanel an instance variable
 
     // --- State Variables for Visualization ---
-    private volatile int comparingIndex1 = -1; // Index of first element being compared
-    private volatile int comparingIndex2 = -1; // Index of second element being compared
-    private volatile int swappingIndex1 = -1; // Index of first element being swapped
-    private volatile int swappingIndex2 = -1; // Index of second element being swapped
-    private volatile int pivotIndex = -1;     // Index of the pivot element (for Quick Sort)
-    private volatile int sortedElementBoundary = -1; // Index up to which elements are sorted (e.g., Bubble, Selection)
-    private volatile boolean isSorted = false; // Flag to indicate if the array is fully sorted
+    private volatile int comparingIndex1 = -1;
+    private volatile int comparingIndex2 = -1;
+    private volatile int swappingIndex1 = -1;
+    private volatile int swappingIndex2 = -1;
+    private volatile int pivotIndex = -1;
+    private volatile int sortedElementBoundary = -1;
+    private volatile boolean isSorted = false;
 
     // --- Thread Control Variables ---
     private volatile boolean isPaused = false;
-    private final Object pauseLock = new Object(); // Object used for thread synchronization during pause
-    private Thread currentSortThread; // Reference to the currently running sorting thread
-    private AtomicBoolean isSortRunning = new AtomicBoolean(false); // Atomic flag to check if a sort is active
+    private final Object pauseLock = new Object();
+    private Thread currentSortThread;
+    private AtomicBoolean isSortRunning = new AtomicBoolean(false);
 
     // --- Counters for Algorithm Analysis ---
     private volatile long swapCount = 0;
@@ -52,32 +53,28 @@ public class SortingVisualizer extends JFrame {
     // --- Constructor ---
     public SortingVisualizer() {
         setTitle("Sorting Visualizer");
-        // Ensure that ELEMENT_WIDTH is calculated based on the initial ARRAY_SIZE
-        ELEMENT_WIDTH = FRAME_WIDTH / ARRAY_SIZE;
 
-        // Set frame size and default close operation
         setSize(FRAME_WIDTH, FRAME_HEIGHT);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setResizable(true); // Allow resizing to adjust element width dynamically
+        setResizable(true);
 
-        // Initialize the array with random values
-        array = generateRandomArray(ARRAY_SIZE);
-
-        // Create and add the panel where bars are drawn
         visualizerPanel = new VisualizerPanel();
         add(visualizerPanel, BorderLayout.CENTER);
 
-        // --- Control Panel Setup ---
-        JPanel controlPanel = new JPanel();
-        controlPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 15, 10)); // Layout for controls
+        // --- Initialize controlPanel here as an instance variable ---
+        controlPanel = new JPanel();
+        controlPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 15, 10));
+
+        // Initialize array AFTER visualizerPanel and controlPanel (for initial height calculation)
+        array = generateRandomArray(ARRAY_SIZE);
 
         // Algorithm Selection
         algorithmComboBox = new JComboBox<>(new String[]{"Bubble Sort", "Selection Sort", "Insertion Sort", "Merge Sort", "Quick Sort", "Heap Sort"});
         algorithmComboBox.addActionListener(e -> {
             String selectedAlgorithm = (String) algorithmComboBox.getSelectedItem();
             if (selectedAlgorithm != null) {
-                resetCounters(); // Reset counters on algorithm change
-                runSortingAlgorithm(selectedAlgorithm); // Start the selected sorting algorithm
+                resetCounters();
+                runSortingAlgorithm(selectedAlgorithm);
             }
         });
         controlPanel.add(new JLabel("Algorithm:"));
@@ -86,13 +83,12 @@ public class SortingVisualizer extends JFrame {
         // Restart Button
         restartButton = new JButton("Restart");
         restartButton.addActionListener(e -> {
-            stopCurrentSortThread(); // Stop any running sort
-            array = generateRandomArray(ARRAY_SIZE); // Generate a new random array
-            resetCounters(); // Reset counters
-            resetHighlighting(); // Reset highlighting indices
-            isSorted = false; // Reset sorted flag
-            visualizerPanel.repaint(); // Repaint to show new unsorted array
-            // Optional: Auto-start the current algorithm or wait for user to select again
+            stopCurrentSortThread();
+            array = generateRandomArray(ARRAY_SIZE);
+            resetCounters();
+            resetHighlighting();
+            isSorted = false;
+            visualizerPanel.repaint();
             runSortingAlgorithm((String) algorithmComboBox.getSelectedItem());
         });
         controlPanel.add(restartButton);
@@ -100,25 +96,25 @@ public class SortingVisualizer extends JFrame {
         // Pause/Resume Button
         pauseResumeButton = new JButton("Pause");
         pauseResumeButton.addActionListener(e -> {
-            togglePause(); // Toggle pause state
+            togglePause();
         });
-        pauseResumeButton.setEnabled(false); // Disable until a sort starts
+        pauseResumeButton.setEnabled(false);
         controlPanel.add(pauseResumeButton);
 
         // Speed Control Slider
-        speedSlider = new JSlider(JSlider.HORIZONTAL, 1, 200, DELAY_MS); // Min 1ms, Max 200ms
+        speedSlider = new JSlider(JSlider.HORIZONTAL, 1, 200, DELAY_MS);
         speedSlider.setMajorTickSpacing(50);
         speedSlider.setMinorTickSpacing(10);
         speedSlider.setPaintTicks(true);
         speedSlider.setPaintLabels(true);
         speedSlider.addChangeListener(e -> {
-            DELAY_MS = speedSlider.getValue(); // Update delay based on slider value
+            DELAY_MS = speedSlider.getValue();
         });
         controlPanel.add(new JLabel("Speed (ms):"));
         controlPanel.add(speedSlider);
 
         // Array Size Slider
-        arraySizeSlider = new JSlider(JSlider.HORIZONTAL, 10, 200, ARRAY_SIZE); // Min 10, Max 200 elements
+        arraySizeSlider = new JSlider(JSlider.HORIZONTAL, 10, 200, ARRAY_SIZE);
         arraySizeSlider.setMajorTickSpacing(50);
         arraySizeSlider.setMinorTickSpacing(10);
         arraySizeSlider.setPaintTicks(true);
@@ -126,15 +122,15 @@ public class SortingVisualizer extends JFrame {
         arraySizeSlider.addChangeListener(e -> {
             int newSize = arraySizeSlider.getValue();
             if (newSize != ARRAY_SIZE) {
-                ARRAY_SIZE = newSize; // Update array size
-                ELEMENT_WIDTH = FRAME_WIDTH / ARRAY_SIZE; // Recalculate bar width
-                stopCurrentSortThread(); // Stop current sort
-                array = generateRandomArray(ARRAY_SIZE); // Generate new array
-                resetCounters(); // Reset counters
-                resetHighlighting(); // Reset highlighting
-                isSorted = false; // Reset sorted flag
-                visualizerPanel.repaint(); // Repaint with new array size
-                // Optional: Auto-start the current algorithm or wait for user
+                ARRAY_SIZE = newSize;
+                ELEMENT_WIDTH = visualizerPanel.getWidth() / ARRAY_SIZE;
+
+                stopCurrentSortThread();
+                array = generateRandomArray(ARRAY_SIZE);
+                resetCounters();
+                resetHighlighting();
+                isSorted = false;
+                visualizerPanel.repaint();
                 runSortingAlgorithm((String) algorithmComboBox.getSelectedItem());
             }
         });
@@ -151,37 +147,46 @@ public class SortingVisualizer extends JFrame {
         comparisonCountLabel = new JLabel("Comparisons: 0");
         controlPanel.add(comparisonCountLabel);
 
-        add(controlPanel, BorderLayout.NORTH); // Add control panel to the top of the frame
+        add(controlPanel, BorderLayout.NORTH);
 
-        pack(); // Packs components tightly
-        setLocationRelativeTo(null); // Center the frame on screen
+        setExtendedState(JFrame.MAXIMIZED_BOTH);
+
         setVisible(true);
 
-        // Initial run to display the first algorithm
+        visualizerPanel.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                ELEMENT_WIDTH = visualizerPanel.getWidth() / ARRAY_SIZE;
+                array = generateRandomArray(ARRAY_SIZE);
+                visualizerPanel.repaint();
+            }
+        });
+
         runSortingAlgorithm((String) algorithmComboBox.getSelectedItem());
     }
 
     // --- Helper Methods ---
 
-    /**
-     * Generates a new array with random integer values.
-     * The height of bars is scaled to fit within the frame height.
-     * @param size The desired size of the array.
-     * @return A new array with random values.
-     */
     private int[] generateRandomArray(int size) {
         int[] arr = new int[size];
         Random rand = new Random();
+
+        // Get actual height of the visualizer panel for bar scaling
+        int panelHeight = visualizerPanel.getHeight();
+
+        // Fallback if panelHeight is 0 (e.g., still during initial layout)
+        if (panelHeight <= 0) {
+             // A more accurate initial fallback for the visual area
+             panelHeight = FRAME_HEIGHT - (controlPanel != null ? controlPanel.getPreferredSize().height : 0);
+             if (panelHeight <= 0) panelHeight = FRAME_HEIGHT; // Final safety fallback
+        }
+
         for (int i = 0; i < size; i++) {
-            // Random heights between 10 and FRAME_HEIGHT - 30 to avoid going off screen or being too small
-            arr[i] = rand.nextInt(FRAME_HEIGHT - 40) + 10;
+            arr[i] = rand.nextInt(panelHeight - 40) + 10;
         }
         return arr;
     }
 
-    /**
-     * Resets all highlighting indices to their default non-highlighted state.
-     */
     private void resetHighlighting() {
         comparingIndex1 = -1;
         comparingIndex2 = -1;
@@ -191,9 +196,6 @@ public class SortingVisualizer extends JFrame {
         sortedElementBoundary = -1;
     }
 
-    /**
-     * Resets swap and comparison counters and updates their labels.
-     */
     private void resetCounters() {
         swapCount = 0;
         comparisonCount = 0;
@@ -203,72 +205,55 @@ public class SortingVisualizer extends JFrame {
         });
     }
 
-    /**
-     * Toggles the pause state of the visualization.
-     */
     private void togglePause() {
-        isPaused = !isPaused; // Invert the pause state
+        isPaused = !isPaused;
         if (isPaused) {
             pauseResumeButton.setText("Resume");
         } else {
             pauseResumeButton.setText("Pause");
             synchronized (pauseLock) {
-                pauseLock.notifyAll(); // Notify all waiting threads to resume
+                pauseLock.notifyAll();
             }
         }
     }
 
-    /**
-     * Stops the currently running sorting thread, if any.
-     */
     private void stopCurrentSortThread() {
         if (currentSortThread != null && currentSortThread.isAlive()) {
-            currentSortThread.interrupt(); // Request thread to stop
+            currentSortThread.interrupt();
             try {
-                currentSortThread.join(100); // Wait briefly for it to terminate
+                currentSortThread.join(200);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 System.err.println("Interrupted while waiting for sort thread to finish.");
             }
         }
-        isSortRunning.set(false); // Mark sort as not running
-        resetHighlighting(); // Ensure no lingering highlights
-        isSorted = false; // Reset sorted flag
-        visualizerPanel.repaint(); // Repaint to clear highlights
-        enableControls(true); // Re-enable controls
+        isSortRunning.set(false);
+        resetHighlighting();
+        isSorted = false;
+        enableControls(true);
     }
 
-    /**
-     * Enables or disables UI controls during sorting.
-     * @param enable True to enable, false to disable.
-     */
     private void enableControls(boolean enable) {
         algorithmComboBox.setEnabled(enable);
         restartButton.setEnabled(enable);
         arraySizeSlider.setEnabled(enable);
-        // Pause/Resume button state depends on sort running or not
         pauseResumeButton.setEnabled(!enable || isSortRunning.get());
     }
 
-    /**
-     * Starts the selected sorting algorithm in a new thread.
-     * @param algorithm The name of the algorithm to run.
-     */
     private void runSortingAlgorithm(String algorithm) {
-        stopCurrentSortThread(); // Ensure previous sort is stopped
-        array = generateRandomArray(ARRAY_SIZE); // Always start with a fresh array
+        stopCurrentSortThread();
+        array = generateRandomArray(ARRAY_SIZE);
         resetCounters();
         resetHighlighting();
         isSorted = false;
-        visualizerPanel.repaint(); // Show the new unsorted array
+        visualizerPanel.repaint();
 
-        enableControls(false); // Disable controls while sorting
+        enableControls(false);
         isSortRunning.set(true);
-        pauseResumeButton.setEnabled(true); // Enable pause button
+        pauseResumeButton.setEnabled(true);
 
         currentSortThread = new Thread(() -> {
             try {
-                // Set algorithm info label
                 SwingUtilities.invokeLater(() -> {
                     switch (algorithm) {
                         case "Bubble Sort": algorithmInfoLabel.setText("Bubble Sort: O(n^2) time, O(1) space"); break;
@@ -289,31 +274,25 @@ public class SortingVisualizer extends JFrame {
                     case "Quick Sort": runQuickSort(array, 0, ARRAY_SIZE - 1); break;
                     case "Heap Sort": runHeapSort(array); break;
                 }
-                isSorted = true; // Mark as sorted after completion
+                isSorted = true;
             } catch (InterruptedException e) {
                 System.out.println("Sorting interrupted: " + algorithm);
             } finally {
-                resetHighlighting(); // Clear any lingering highlights
-                SwingUtilities.invokeLater(() -> visualizerPanel.repaint()); // Final repaint for sorted state
-                isSortRunning.set(false); // Mark sort as finished
-                enableControls(true); // Re-enable controls
-                pauseResumeButton.setText("Pause"); // Reset pause button text
-                pauseResumeButton.setEnabled(false); // Disable pause button after sort
+                resetHighlighting();
+                SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
+                isSortRunning.set(false);
+                enableControls(true);
+                pauseResumeButton.setText("Pause");
+                pauseResumeButton.setEnabled(false);
             }
         });
         currentSortThread.start();
     }
 
-    /**
-     * Swaps two elements in the array and updates swap count.
-     * @param index1 First index.
-     * @param index2 Second index.
-     * @throws InterruptedException if thread is interrupted during sleep.
-     */
     private void swap(int index1, int index2) throws InterruptedException {
         swappingIndex1 = index1;
         swappingIndex2 = index2;
-        SwingUtilities.invokeLater(() -> visualizerPanel.repaint()); // Repaint with swap highlight
+        SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
         sleep();
 
         int temp = array[index1];
@@ -323,34 +302,25 @@ public class SortingVisualizer extends JFrame {
         swapCount++;
         SwingUtilities.invokeLater(() -> swapCountLabel.setText("Swaps: " + swapCount));
 
-        // No need for a sleep after the actual swap if repaint follows in algorithm
-        // But ensures highlight is visible before returning to normal
         swappingIndex1 = -1;
         swappingIndex2 = -1;
-        SwingUtilities.invokeLater(() -> visualizerPanel.repaint()); // Repaint to clear swap highlight
+        SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
     }
 
-    /**
-     * Pauses the thread if `isPaused` is true, then sleeps for `DELAY_MS`.
-     * @throws InterruptedException if the thread is interrupted.
-     */
     private void sleep() throws InterruptedException {
-        // Check for interruption request
         if (Thread.currentThread().isInterrupted()) {
             throw new InterruptedException();
         }
 
-        // Handle pause
         synchronized (pauseLock) {
             while (isPaused) {
-                pauseLock.wait(); // Wait until notified to resume
-                if (Thread.currentThread().isInterrupted()) { // Check interruption after waking up
+                pauseLock.wait();
+                if (Thread.currentThread().isInterrupted()) {
                     throw new InterruptedException();
                 }
             }
         }
 
-        // Actual delay
         Thread.sleep(DELAY_MS);
     }
 
@@ -365,52 +335,45 @@ public class SortingVisualizer extends JFrame {
                 comparingIndex1 = j;
                 comparingIndex2 = j + 1;
                 SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
-                sleep(); // Pause for comparison highlight
+                sleep();
 
                 if (array[j] > array[j + 1]) {
                     swap(j, j + 1);
                 }
-                resetHighlighting(); // Clear comparison/swap highlights
+                resetHighlighting();
                 SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
-                sleep(); // Small delay to show state after potential swap
             }
-            sortedElementBoundary = ARRAY_SIZE - 1 - i; // Mark elements as sorted
+            sortedElementBoundary = ARRAY_SIZE - 1 - i;
             SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
         }
-        sortedElementBoundary = 0; // All elements sorted
+        sortedElementBoundary = -1;
     }
 
     private void runSelectionSort() throws InterruptedException {
         for (int i = 0; i < ARRAY_SIZE - 1; i++) {
             int minIndex = i;
-            comparingIndex1 = i; // Highlight current element being considered for minimum
-            SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
-            sleep();
 
             for (int j = i + 1; j < ARRAY_SIZE; j++) {
                 comparisonCount++;
                 SwingUtilities.invokeLater(() -> comparisonCountLabel.setText("Comparisons: " + comparisonCount));
 
-                comparingIndex2 = j; // Highlight element being compared against current minimum
+                comparingIndex1 = minIndex;
+                comparingIndex2 = j;
                 SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
                 sleep();
 
                 if (array[j] < array[minIndex]) {
                     minIndex = j;
-                    comparingIndex1 = minIndex; // Update highlight to new minimum
-                    SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
-                    sleep();
                 }
             }
             if (minIndex != i) {
                 swap(i, minIndex);
             }
-            sortedElementBoundary = i; // Mark current element as sorted
-            resetHighlighting(); // Clear comparisons
+            sortedElementBoundary = i;
+            resetHighlighting();
             SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
-            sleep();
         }
-        sortedElementBoundary = ARRAY_SIZE; // All elements sorted
+        sortedElementBoundary = -1;
     }
 
     private void runInsertionSort() throws InterruptedException {
@@ -418,7 +381,7 @@ public class SortingVisualizer extends JFrame {
             int key = array[i];
             int j = i - 1;
 
-            comparingIndex1 = i; // Element to be inserted
+            comparingIndex1 = i;
             SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
             sleep();
 
@@ -426,23 +389,27 @@ public class SortingVisualizer extends JFrame {
                 comparisonCount++;
                 SwingUtilities.invokeLater(() -> comparisonCountLabel.setText("Comparisons: " + comparisonCount));
 
-                comparingIndex2 = j; // Element being compared against
+                comparingIndex2 = j;
                 SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
                 sleep();
 
                 if (array[j] > key) {
                     array[j + 1] = array[j];
-                    SwingUtilities.invokeLater(() -> visualizerPanel.repaint()); // Shift visualization
+                    swappingIndex1 = j;
+                    swappingIndex2 = j + 1;
+                    SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
                     sleep();
+                    swappingIndex1 = -1;
+                    swappingIndex2 = -1;
                     j--;
                 } else {
                     break;
                 }
             }
             array[j + 1] = key;
-            resetHighlighting(); // Clear comparisons
+            resetHighlighting();
             SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
-            sleep(); // Show final position after insertion
+            sleep();
         }
     }
 
@@ -487,13 +454,12 @@ public class SortingVisualizer extends JFrame {
                 j++;
             }
             k++;
-            SwingUtilities.invokeLater(() -> visualizerPanel.repaint()); // Repaint after element placement
+            SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
             sleep();
         }
 
         while (i < n1) {
             arr[k] = leftArr[i];
-            comparingIndex1 = left + i; // Highlight element being copied
             SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
             sleep();
             i++;
@@ -502,7 +468,6 @@ public class SortingVisualizer extends JFrame {
 
         while (j < n2) {
             arr[k] = rightArr[j];
-            comparingIndex2 = mid + 1 + j; // Highlight element being copied
             SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
             sleep();
             j++;
@@ -515,6 +480,7 @@ public class SortingVisualizer extends JFrame {
         if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
         if (low < high) {
             int pi = partition(arr, low, high);
+            resetHighlighting();
             runQuickSort(arr, low, pi - 1);
             runQuickSort(arr, pi + 1, high);
         }
@@ -522,7 +488,7 @@ public class SortingVisualizer extends JFrame {
 
     private int partition(int[] arr, int low, int high) throws InterruptedException {
         int pivot = arr[high];
-        pivotIndex = high; // Highlight pivot
+        pivotIndex = high;
         SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
         sleep();
 
@@ -532,137 +498,128 @@ public class SortingVisualizer extends JFrame {
             comparisonCount++;
             SwingUtilities.invokeLater(() -> comparisonCountLabel.setText("Comparisons: " + comparisonCount));
 
-            comparingIndex1 = j; // Highlight element being compared against pivot
+            comparingIndex1 = j;
             SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
             sleep();
 
             if (arr[j] < pivot) {
                 i++;
-                if (i != j) { // Only swap if different elements
+                if (i != j) {
                     swap(i, j);
                 }
                 resetHighlighting();
-                pivotIndex = high; // Keep pivot highlighted
+                pivotIndex = high;
                 SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
                 sleep();
             }
         }
 
-        if (i + 1 != high) { // Only swap if pivot needs to move
+        if (i + 1 != high) {
             swap(i + 1, high);
         }
-        resetHighlighting();
+        pivotIndex = -1;
         SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
-        sleep(); // Show final pivot position
+        sleep();
         return i + 1;
     }
 
     private void runHeapSort(int[] arr) throws InterruptedException {
         int n = arr.length;
 
-        // Build heap (rearrange array)
         for (int i = n / 2 - 1; i >= 0; i--) {
             heapify(arr, n, i);
         }
 
-        // One by one extract an element from heap
         for (int i = n - 1; i >= 0; i--) {
-            // Move current root to end
             swap(0, i);
-            sortedElementBoundary = i; // Mark this element as sorted
+            sortedElementBoundary = i;
             SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
             sleep();
 
-            // call max heapify on the reduced heap
             heapify(arr, i, 0);
         }
-        sortedElementBoundary = 0; // All elements sorted
+        sortedElementBoundary = -1;
     }
 
     private void heapify(int[] arr, int n, int i) throws InterruptedException {
-        int largest = i; // Initialize largest as root
-        int left = 2 * i + 1; // left child
-        int right = 2 * i + 2; // right child
+        int largest = i;
+        int left = 2 * i + 1;
+        int right = 2 * i + 2;
 
-        comparisonCount++; SwingUtilities.invokeLater(() -> comparisonCountLabel.setText("Comparisons: " + comparisonCount));
-        comparingIndex1 = largest; // Highlight current root
-        comparingIndex2 = -1; // No second comparison element initially
-        if (left < n) comparingIndex2 = left; // Highlight left child if exists
+        comparisonCount++;
+        SwingUtilities.invokeLater(() -> comparisonCountLabel.setText("Comparisons: " + comparisonCount));
+        comparingIndex1 = largest;
+        comparingIndex2 = -1;
+        if (left < n) comparingIndex2 = left;
         SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
         sleep();
 
-        // If left child is larger than root
         if (left < n && arr[left] > arr[largest]) {
             largest = left;
         }
 
-        comparisonCount++; SwingUtilities.invokeLater(() -> comparisonCountLabel.setText("Comparisons: " + comparisonCount));
-        comparingIndex1 = largest; // New potential largest
+        comparisonCount++;
+        SwingUtilities.invokeLater(() -> comparisonCountLabel.setText("Comparisons: " + comparisonCount));
+        comparingIndex1 = largest;
         comparingIndex2 = -1;
-        if (right < n) comparingIndex2 = right; // Highlight right child if exists
+        if (right < n) comparingIndex2 = right;
         SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
         sleep();
 
-        // If right child is larger than largest so far
         if (right < n && arr[right] > arr[largest]) {
             largest = right;
         }
 
-        // If largest is not root
         if (largest != i) {
             swap(i, largest);
-            // Recursively heapify the affected sub-tree
             heapify(arr, n, largest);
         }
-        resetHighlighting(); // Clear comparisons after heapify step
+        resetHighlighting();
         SwingUtilities.invokeLater(() -> visualizerPanel.repaint());
         sleep();
     }
 
-    // --- Inner Class for Visualization Panel ---
     private class VisualizerPanel extends JPanel {
         @Override
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
             Graphics2D g2d = (Graphics2D) g;
-            g2d.clearRect(0, 0, getWidth(), getHeight()); // Clear the panel background
+            g2d.clearRect(0, 0, getWidth(), getHeight());
+
+            ELEMENT_WIDTH = getWidth() / ARRAY_SIZE; // Ensure ELEMENT_WIDTH is always calculated correctly
 
             for (int i = 0; i < ARRAY_SIZE; i++) {
                 int barHeight = array[i];
                 int x = i * ELEMENT_WIDTH;
-                int y = getHeight() - barHeight; // Draw bars from the bottom
+                int y = getHeight() - barHeight;
 
-                // Set default bar color
                 g2d.setColor(Color.BLUE);
 
-                // --- Apply highlighting colors based on state ---
                 if (isSorted) {
-                    g2d.setColor(Color.LIGHT_GRAY); // Fully sorted
-                } else if (i == sortedElementBoundary && (algorithmComboBox.getSelectedItem().equals("Bubble Sort") || algorithmComboBox.getSelectedItem().equals("Selection Sort") || algorithmComboBox.getSelectedItem().equals("Heap Sort"))) {
-                     g2d.setColor(Color.GREEN.darker()); // Darker green for sorted elements
-                } else if (i == pivotIndex) {
-                    g2d.setColor(Color.MAGENTA); // Pivot element
+                    g2d.setColor(Color.LIGHT_GRAY);
+                } else if (i < sortedElementBoundary || (algorithmComboBox.getSelectedItem() != null && algorithmComboBox.getSelectedItem().equals("Selection Sort") && i <= sortedElementBoundary)) {
+                    g2d.setColor(Color.GREEN.darker());
+                } else if (i >= sortedElementBoundary && sortedElementBoundary != -1 && algorithmComboBox.getSelectedItem() != null && algorithmComboBox.getSelectedItem().equals("Bubble Sort")) {
+                    g2d.setColor(Color.GREEN.darker());
+                } else if (i >= sortedElementBoundary && sortedElementBoundary != -1 && algorithmComboBox.getSelectedItem() != null && algorithmComboBox.getSelectedItem().equals("Heap Sort")) {
+                    g2d.setColor(Color.GREEN.darker());
+                }
+                else if (i == pivotIndex) {
+                    g2d.setColor(Color.MAGENTA);
                 } else if (i == swappingIndex1 || i == swappingIndex2) {
-                    g2d.setColor(Color.RED); // Swapping elements
+                    g2d.setColor(Color.RED);
                 } else if (i == comparingIndex1 || i == comparingIndex2) {
-                    g2d.setColor(Color.YELLOW); // Comparing elements
-                } else if (i >= sortedElementBoundary && sortedElementBoundary != -1 && (algorithmComboBox.getSelectedItem().equals("Merge Sort") || algorithmComboBox.getSelectedItem().equals("Quick Sort"))) {
-                    // For algorithms where sorted elements are not explicitly marked from one end
-                    // This might need more nuanced logic depending on how you want to show 'sorted' parts for recursive sorts.
-                    // For now, this is a placeholder.
-                    // g2d.setColor(Color.GRAY);
+                    g2d.setColor(Color.YELLOW);
                 }
 
-
-                g2d.fillRect(x, y, ELEMENT_WIDTH - 1, barHeight); // Fill bar, -1 for gap
-                g2d.setColor(Color.BLACK); // Border color
-                g2d.drawRect(x, y, ELEMENT_WIDTH - 1, barHeight); // Draw border
+                g2d.fillRect(x, y, ELEMENT_WIDTH - 1, barHeight);
+                g2d.setColor(Color.BLACK);
+                g2d.drawRect(x, y, ELEMENT_WIDTH - 1, barHeight);
             }
         }
     }
 
-    // --- Main Method ---
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(SortingVisualizer::new); // Run GUI on Event Dispatch Thread
+        SwingUtilities.invokeLater(SortingVisualizer::new);
     }
 }
